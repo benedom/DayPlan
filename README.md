@@ -8,14 +8,18 @@
 
 Anything due today shows up by itself, and you can take it back out without lying about when it's due.
 
-<img src="https://img.shields.io/badge/platform-macOS%2015%2B-lightgrey" alt="macOS 15+">
-<img src="https://img.shields.io/badge/Swift-6-orange" alt="Swift 6">
-<img src="https://img.shields.io/badge/dependencies-none-brightgreen" alt="No dependencies">
-<img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license">
+<a href="#install"><img src="https://img.shields.io/badge/macOS-15%2B-555555?style=flat-square&logo=apple&logoColor=white" alt="macOS 15+"></a>
+<a href="https://swift.org"><img src="https://img.shields.io/badge/Swift-6-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 6"></a>
+<a href="Package.swift"><img src="https://img.shields.io/badge/dependencies-none-2EA043?style=flat-square&logo=swift&logoColor=white" alt="No dependencies"></a>
+<a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0969DA?style=flat-square&logo=opensourceinitiative&logoColor=white" alt="MIT license"></a>
 
 <br><br>
 
 <img src="docs/images/hero.png" alt="DayPlan main window" width="880">
+
+<br><br>
+
+[Overview](#overview) · [Why I built it](#why-i-built-it) · [Install](#install) · [Languages](#languages) · [How it works](#how-it-works) · [Your data](#your-data) · [License](#license)
 
 </div>
 
