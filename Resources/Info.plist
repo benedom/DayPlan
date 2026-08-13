@@ -9,7 +9,7 @@
     <key>CFBundleExecutable</key>
     <string>DayPlan</string>
     <key>CFBundleIdentifier</key>
-    <string>de.be-app.dayplan</string>
+    <string>io.bbstudios.dayplan</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleInfoDictionaryVersion</key>
