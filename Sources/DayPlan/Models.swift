@@ -155,6 +155,9 @@ extension Todo {
         guard let dueDate else { return false }
         let cal = Calendar.current
         if cal.isDate(dueDate, inSameDayAs: day) { return true }
+        // A finished todo is never overdue, so it must not keep being dragged
+        // forward into every following day's plan.
+        guard !isDone else { return false }
         return includeOverdue && cal.startOfDay(for: dueDate) < cal.startOfDay(for: day)
     }
 

@@ -92,6 +92,11 @@ struct RootView: View {
             let now = Calendar.current.startOfDay(for: Date())
             if now != today { today = now }
         }
+        // The ticker doesn't run while the Mac sleeps, so waking up on a new day
+        // would otherwise show yesterday's plan until the next minute boundary.
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: RunLoop.main)) { _ in
+            today = Calendar.current.startOfDay(for: Date())
+        }
         .onReceive(NotificationCenter.default.publisher(for: .newListRequested)) { _ in
             addList()
         }
