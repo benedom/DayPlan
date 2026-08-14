@@ -67,7 +67,27 @@ struct TodoEditor: View {
     let includeOverdue: Bool
     let onDelete: (Todo) -> Void
 
+    @Environment(\.modelContext) private var context
+    @State private var timeInput = ""
+
+    init(todo: Todo, lists: [TodoList], today: Date, includeOverdue: Bool, onDelete: @escaping (Todo) -> Void) {
+        self.todo = todo
+        self.lists = lists
+        self.today = today
+        self.includeOverdue = includeOverdue
+        self.onDelete = onDelete
+    }
+
     private var inDaily: Bool { todo.isInDailyPlan(on: today, includeOverdue: includeOverdue) }
+
+    /// Most recently logged day first, then most recently logged within a day.
+    private var sortedTimeEntries: [TimeEntry] {
+        todo.timeEntries.sorted {
+            $0.day != $1.day ? $0.day > $1.day : $0.createdAt > $1.createdAt
+        }
+    }
+
+    private var parsedTimeInput: Int? { TimeParser.parseMinutes(timeInput) }
 
     private var dueBinding: Binding<Date> {
         Binding(
@@ -159,6 +179,53 @@ struct TodoEditor: View {
             .animation(Motion.reveal, value: todo.dueDate)
             .animation(Motion.reveal, value: inDaily)
 
+            Section("Time Tracked") {
+                if !sortedTimeEntries.isEmpty {
+                    ForEach(sortedTimeEntries) { entry in
+                        HStack {
+                            Text(entry.day, style: .date)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(TimeFormatter.shortLabel(minutes: entry.minutes))
+                            Button {
+                                withAnimation(Motion.list) { context.delete(entry) }
+                            } label: {
+                                Image(systemName: "minus.circle.fill")
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+                    HStack {
+                        Text("Total").font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Text(TimeFormatter.shortLabel(minutes: todo.totalTrackedMinutes))
+                            .font(.subheadline.weight(.semibold))
+                    }
+                }
+
+                HStack(alignment: .center, spacing: 8) {
+                    Text("Add time (e.g. 1.5h, 30 min)")
+                    TextField("", text: $timeInput)
+                        .textFieldStyle(.roundedBorder)
+                        .controlSize(.large)
+                        .onSubmit(addTime)
+                        .accessibilityLabel("Add time")
+                    Button("Add", action: addTime)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .disabled(parsedTimeInput == nil)
+                }
+                .padding(.vertical, 2)
+                if !timeInput.isEmpty && parsedTimeInput == nil {
+                    Text("Couldn’t understand that. Try “1.5h”, “30 min”, or “1:30”.")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .transition(.opacity)
+                }
+            }
+            .animation(Motion.reveal, value: timeInput.isEmpty || parsedTimeInput != nil)
+
             Section("Notes") {
                 TextEditor(text: $todo.notes)
                     .font(.body)
@@ -172,5 +239,12 @@ struct TodoEditor: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private func addTime() {
+        guard let minutes = parsedTimeInput else { return }
+        let entry = TimeEntry(minutes: minutes, day: today, todo: todo)
+        context.insert(entry)
+        timeInput = ""
     }
 }

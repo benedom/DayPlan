@@ -369,10 +369,16 @@ struct TodoRow: View {
                             .help(notesPreview)
                             .transition(.scale.combined(with: .opacity))
                     }
+                    if todo.totalTrackedMinutes > 0 {
+                        Label(TimeFormatter.shortLabel(minutes: todo.totalTrackedMinutes), systemImage: "clock")
+                            .foregroundStyle(.secondary)
+                            .transition(.scale.combined(with: .opacity))
+                    }
                 }
                 .font(.caption)
                 .animation(Motion.snap, value: todo.dueDate)
                 .animation(Motion.snap, value: notesPreview.isEmpty)
+                .animation(Motion.snap, value: todo.totalTrackedMinutes)
             }
 
             Spacer(minLength: 4)

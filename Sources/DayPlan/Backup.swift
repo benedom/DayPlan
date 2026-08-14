@@ -14,6 +14,11 @@ struct BackupDocument: Codable {
     var exportedAt: Date
     var lists: [BackupList]
     var todos: [BackupTodo]
+    var timeEntries: [BackupTimeEntry] = []
+
+    enum CodingKeys: String, CodingKey {
+        case formatVersion, schemaVersion, appVersion, exportedAt, lists, todos, timeEntries
+    }
 }
 
 struct BackupList: Codable {
@@ -25,6 +30,8 @@ struct BackupList: Codable {
 }
 
 struct BackupTodo: Codable {
+    /// Local to this file, just to let `BackupTimeEntry` reference its todo.
+    var id: UUID = UUID()
     var title: String
     var notes: String
     var priorityRaw: Int
@@ -36,6 +43,54 @@ struct BackupTodo: Codable {
     var excludedDay: Date?
     /// References `BackupList.id`; nil means the todo is unfiled.
     var listID: UUID?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, notes, priorityRaw, dueDate, isDone, completedAt
+        case createdAt, pinnedDay, excludedDay, listID
+    }
+}
+
+// Synthesized `Decodable` ignores default values: a missing key is `keyNotFound`,
+// not "use the default". Every backup the shipped app wrote has no `id` and no
+// `timeEntries`, so restore has to treat those as optional. `init(from:)` lives
+// in extensions so the memberwise inits used on export stay synthesized.
+extension BackupDocument {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // Old files always wrote this, but the same default-value trap applies.
+        formatVersion = try container.decodeIfPresent(Int.self, forKey: .formatVersion) ?? 1
+        schemaVersion = try container.decode(String.self, forKey: .schemaVersion)
+        appVersion = try container.decode(String.self, forKey: .appVersion)
+        exportedAt = try container.decode(Date.self, forKey: .exportedAt)
+        lists = try container.decode([BackupList].self, forKey: .lists)
+        todos = try container.decode([BackupTodo].self, forKey: .todos)
+        timeEntries = try container.decodeIfPresent([BackupTimeEntry].self, forKey: .timeEntries) ?? []
+    }
+}
+
+extension BackupTodo {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        title = try container.decode(String.self, forKey: .title)
+        notes = try container.decode(String.self, forKey: .notes)
+        priorityRaw = try container.decode(Int.self, forKey: .priorityRaw)
+        dueDate = try container.decodeIfPresent(Date.self, forKey: .dueDate)
+        isDone = try container.decode(Bool.self, forKey: .isDone)
+        completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        pinnedDay = try container.decodeIfPresent(Date.self, forKey: .pinnedDay)
+        excludedDay = try container.decodeIfPresent(Date.self, forKey: .excludedDay)
+        listID = try container.decodeIfPresent(UUID.self, forKey: .listID)
+    }
+}
+
+struct BackupTimeEntry: Codable {
+    var minutes: Int
+    var day: Date
+    var createdAt: Date
+    /// References `BackupTodo.id`.
+    var todoID: UUID
 }
 
 // MARK: - Import options and results
@@ -53,6 +108,7 @@ struct ImportSummary {
     var listsMatched = 0
     var todosCreated = 0
     var todosSkipped = 0
+    var timeEntriesCreated = 0
 }
 
 enum BackupError: LocalizedError {
@@ -93,8 +149,12 @@ enum BackupService {
                               createdAt: list.createdAt)
         }
 
-        let todoDTOs = todos.map { todo in
-            BackupTodo(title: todo.title,
+        var todoIDs: [PersistentIdentifier: UUID] = [:]
+        let todoDTOs = todos.map { todo -> BackupTodo in
+            let id = UUID()
+            todoIDs[todo.persistentModelID] = id
+            return BackupTodo(id: id,
+                       title: todo.title,
                        notes: todo.notes,
                        priorityRaw: todo.priorityRaw,
                        dueDate: todo.dueDate,
@@ -106,12 +166,20 @@ enum BackupService {
                        listID: todo.list.flatMap { ids[$0.persistentModelID] })
         }
 
+        let timeEntryDTOs = todos.flatMap { todo in
+            todo.timeEntries.compactMap { entry -> BackupTimeEntry? in
+                guard let todoID = todoIDs[todo.persistentModelID] else { return nil }
+                return BackupTimeEntry(minutes: entry.minutes, day: entry.day, createdAt: entry.createdAt, todoID: todoID)
+            }
+        }
+
         let document = BackupDocument(
-            schemaVersion: "\(DayPlanSchemaV1.versionIdentifier)",
+            schemaVersion: "\(DayPlanSchemaV2.versionIdentifier)",
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
             exportedAt: Date(),
             lists: listDTOs,
-            todos: todoDTOs
+            todos: todoDTOs,
+            timeEntries: timeEntryDTOs
         )
 
         return try encoder.encode(document)
@@ -170,17 +238,25 @@ enum BackupService {
             summary.listsCreated += 1
         }
 
-        // Re-importing the same file twice should not double every todo.
-        var seen = Set<String>()
+        // Re-importing the same file twice should not double every todo, but its
+        // time entries still need somewhere to attach, so track the existing
+        // todo behind each identity key rather than just whether it's taken.
+        var existingByKey: [String: Todo] = [:]
         if mode == .merge {
             for todo in try context.fetch(FetchDescriptor<Todo>()) {
-                seen.insert(identityKey(title: todo.title, createdAt: todo.createdAt))
+                existingByKey[identityKey(title: todo.title, createdAt: todo.createdAt)] = todo
             }
         }
 
+        // Maps each DTO's file-local id to the live todo it resolved to, so
+        // time entries below can find their todo regardless of whether it was
+        // just created or already existed.
+        var resolvedTodos: [UUID: Todo] = [:]
+
         for dto in document.todos {
             let key = identityKey(title: dto.title, createdAt: dto.createdAt)
-            if mode == .merge, !seen.insert(key).inserted {
+            if mode == .merge, let existing = existingByKey[key] {
+                resolvedTodos[dto.id] = existing
                 summary.todosSkipped += 1
                 continue
             }
@@ -196,7 +272,32 @@ enum BackupService {
             todo.excludedDay = dto.excludedDay
             todo.list = dto.listID.flatMap { resolved[$0] }
             context.insert(todo)
+            resolvedTodos[dto.id] = todo
+            if mode == .merge { existingByKey[key] = todo }
             summary.todosCreated += 1
+        }
+
+        // Re-importing the same file twice should not double every entry either.
+        // The key includes the file-local todo id: duration + day + second is not
+        // unique across todos (three "30m" logs in the same second would collide).
+        var seenEntries = Set<String>()
+        if mode == .merge {
+            for (todoID, todo) in resolvedTodos {
+                for entry in todo.timeEntries {
+                    seenEntries.insert(timeEntryKey(todoID: todoID, minutes: entry.minutes, day: entry.day, createdAt: entry.createdAt))
+                }
+            }
+        }
+
+        for dto in document.timeEntries {
+            guard let todo = resolvedTodos[dto.todoID] else { continue }
+            let key = timeEntryKey(todoID: dto.todoID, minutes: dto.minutes, day: dto.day, createdAt: dto.createdAt)
+            if mode == .merge, !seenEntries.insert(key).inserted { continue }
+
+            let entry = TimeEntry(minutes: dto.minutes, day: dto.day, todo: todo)
+            entry.createdAt = dto.createdAt
+            context.insert(entry)
+            summary.timeEntriesCreated += 1
         }
 
         try context.save()
@@ -206,9 +307,16 @@ enum BackupService {
     // MARK: Helpers
 
     /// Title plus creation instant is as close to an identity as the model gets.
+    /// Seconds are truncated, not rounded: the file writes ISO8601 without
+    /// fractional seconds, so rounding would miss about half of live dates
+    /// on a merge re-import.
     private static func identityKey(title: String, createdAt: Date) -> String {
         let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return "\(normalized)|\(Int(createdAt.timeIntervalSince1970.rounded()))"
+        return "\(normalized)|\(Int(createdAt.timeIntervalSince1970))"
+    }
+
+    private static func timeEntryKey(todoID: UUID, minutes: Int, day: Date, createdAt: Date) -> String {
+        "\(todoID)|\(minutes)|\(Int(day.timeIntervalSince1970))|\(Int(createdAt.timeIntervalSince1970))"
     }
 
     private static var encoder: JSONEncoder {

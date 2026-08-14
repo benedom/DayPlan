@@ -105,6 +105,7 @@ enum BackupUI {
         if summary.listsCreated > 0 { lines.append("\(summary.listsCreated) list(s) created.") }
         if summary.listsMatched > 0 { lines.append("\(summary.listsMatched) list(s) matched by name.") }
         if summary.todosSkipped > 0 { lines.append("\(summary.todosSkipped) todo(s) skipped as duplicates.") }
+        if summary.timeEntriesCreated > 0 { lines.append("\(summary.timeEntriesCreated) time entry(ies) imported.") }
 
         let alert = NSAlert()
         alert.messageText = summary.mode == .replace ? "Backup Restored" : "Backup Merged"

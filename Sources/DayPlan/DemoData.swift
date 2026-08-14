@@ -49,19 +49,23 @@ enum DemoData {
             context.insert(todo)
         }
 
-        let doneToday: [(String, Priority, TodoList?, Date)] = [
-            ("Fix the midnight rollover in the Today pane", .high, work, finished(11, 32)),
-            ("Reply to the hosting invoice", .low, personal, finished(11, 45)),
-            ("Merge the animation refactor", .medium, work, finished(12, 4)),
-            ("Water the plants", .none, personal, finished(12, 19)),
-            ("Export a backup", .none, nil, finished(14, 33))
+        let doneToday: [(String, Priority, TodoList?, Date, Int)] = [
+            ("Fix the midnight rollover in the Today pane", .high, work, finished(11, 32), 90),
+            ("Reply to the hosting invoice", .low, personal, finished(11, 45), 15),
+            ("Merge the animation refactor", .medium, work, finished(12, 4), 135),
+            ("Water the plants", .none, personal, finished(12, 19), 0),
+            ("Export a backup", .none, nil, finished(14, 33), 0)
         ]
-        for (title, priority, list, at) in doneToday {
+        for (title, priority, list, at, trackedMinutes) in doneToday {
             let todo = Todo(title: title, notes: "", priority: priority, list: list)
             todo.addToDailyPlan(on: today)
             todo.isDone = true
             todo.completedAt = at
             context.insert(todo)
+            // Shows the time-tracking + export feature with something to export.
+            if trackedMinutes > 0 {
+                context.insert(TimeEntry(minutes: trackedMinutes, day: today, todo: todo))
+            }
         }
 
         // Not in today's plan, so the other panes have something to show.
