@@ -27,10 +27,18 @@ enum TimeParser {
             return nil
         }
 
-        guard minutes > 0 else { return nil }
+        // `Int(Double)` traps on infinite or out-of-Int64 values, and the bare
+        // number branch above reaches both: `Double("inf")`, `Double("1e300")`
+        // and a pasted twenty-digit number all parse. Reject them here rather
+        // than let the conversion below crash the app mid-keystroke.
+        guard minutes > 0, minutes.isFinite, minutes <= Double(maxMinutes) else { return nil }
         let stepped = Int((minutes / 15).rounded()) * 15
         return max(15, stepped)
     }
+
+    /// Only a guard against typos and paste accidents, deliberately far above
+    /// any duration worth logging, so no plausible input changes meaning.
+    private static let maxMinutes = 10_000 * 60
 
     /// "1h30", "1h30m", "1 h 30 min"
     private static func matchHoursAndMinutes(_ s: String) -> Double? {

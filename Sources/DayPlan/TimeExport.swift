@@ -29,7 +29,9 @@ struct TimeExportSheet: View {
     @Query private var todos: [Todo]
     @Environment(\.dismiss) private var dismiss
     @State private var day: Date
-    @State private var copied = false
+    @State private var copyState: CopyState = .idle
+
+    private enum CopyState { case idle, copied, failed }
 
     init(listTitle: String, listID: PersistentIdentifier?, day: Date) {
         self.listTitle = listTitle
@@ -47,6 +49,9 @@ struct TimeExportSheet: View {
     private var text: String { TimeExportService.text(for: scopedTodos, on: day) }
 
     var body: some View {
+        // Computed once per pass: `text` walks every todo, and the body reads it
+        // four times (preview, styling, the Copy button's enablement, onChange).
+        let text = text
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Export Tracked Time").font(.headline)
@@ -69,10 +74,18 @@ struct TimeExportSheet: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
 
             HStack {
-                if copied {
+                switch copyState {
+                case .idle:
+                    EmptyView()
+                case .copied:
                     Label("Copied to Clipboard", systemImage: "checkmark")
                         .font(.caption)
                         .foregroundStyle(.green)
+                        .transition(.opacity)
+                case .failed:
+                    Label("Couldn’t copy to the clipboard.", systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.red)
                         .transition(.opacity)
                 }
                 Spacer()
@@ -80,8 +93,11 @@ struct TimeExportSheet: View {
                 Button("Copy to Clipboard") {
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
-                    pasteboard.setString(text, forType: .string)
-                    withAnimation(Motion.snap) { copied = true }
+                    // Only claim success if the write actually landed: another
+                    // app can be holding the pasteboard, and silently showing
+                    // "Copied" would send the user to paste nothing.
+                    let written = pasteboard.setString(text, forType: .string)
+                    withAnimation(Motion.snap) { copyState = written ? .copied : .failed }
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(text.isEmpty)
@@ -89,6 +105,6 @@ struct TimeExportSheet: View {
         }
         .padding(20)
         .frame(width: 380)
-        .onChange(of: text) { _, _ in copied = false }
+        .onChange(of: text) { _, _ in copyState = .idle }
     }
 }
