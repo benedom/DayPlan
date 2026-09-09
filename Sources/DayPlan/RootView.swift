@@ -9,6 +9,16 @@ enum Route: Hashable {
     case list(PersistentIdentifier)
 }
 
+/// What `TimeExportSheet` exports: a list (or the unfiled todos), identified
+/// live rather than snapshotted, so logging time while the sheet is open still
+/// shows up in the preview.
+struct TimeExportTarget: Identifiable {
+    let id = UUID()
+    let title: String
+    /// `nil` means the unfiled "No List" todos.
+    let listID: PersistentIdentifier?
+}
+
 struct RootView: View {
     var storeOutcome: StoreOutcome = .opened
 
@@ -31,6 +41,7 @@ struct RootView: View {
     @State private var renameText = ""
     @State private var listPendingDeletion: TodoList?
     @State private var showStoreAlert = false
+    @State private var exportTarget: TimeExportTarget?
 
     @AppStorage("includeOverdue") private var includeOverdue = true
     @AppStorage("showCompleted") private var showCompleted = false
@@ -137,6 +148,10 @@ struct RootView: View {
         } message: {
             Text("Todos in this list are deleted as well. This can’t be undone.")
         }
+        .sheet(item: $exportTarget) { target in
+            TimeExportSheet(listTitle: target.title, listID: target.listID, day: today)
+                .environment(\.modelContext, context)
+        }
         .task { showStoreAlert = storeOutcome.needsAttention }
         .alert(storeAlertTitle, isPresented: $showStoreAlert) {
             if case .recovered(let quarantine, _) = storeOutcome {
@@ -218,6 +233,11 @@ struct RootView: View {
                     title: "No List",
                     count: openCount(in: unassignedTodos)
                 )
+                .contextMenu {
+                    Button("Export Tracked Time…") {
+                        exportTarget = TimeExportTarget(title: "No List", listID: nil)
+                    }
+                }
 
                 ForEach(lists) { list in
                     sidebarRow(
@@ -240,6 +260,10 @@ struct RootView: View {
                                     Label(name.capitalized, systemImage: list.colorName == name ? "checkmark" : "circle.fill")
                                 }
                             }
+                        }
+                        Divider()
+                        Button("Export Tracked Time…") {
+                            exportTarget = TimeExportTarget(title: list.name, listID: list.persistentModelID)
                         }
                         Divider()
                         Button("Delete List…", role: .destructive) { listPendingDeletion = list }

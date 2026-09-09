@@ -102,6 +102,9 @@ final class Todo {
 
     var list: TodoList?
 
+    @Relationship(deleteRule: .cascade, inverse: \TimeEntry.todo)
+    var timeEntries: [TimeEntry] = []
+
     init(title: String,
          notes: String = "",
          priority: Priority = .none,
@@ -119,6 +122,66 @@ final class Todo {
     var priority: Priority {
         get { Priority(rawValue: priorityRaw) ?? .none }
         set { priorityRaw = newValue.rawValue }
+    }
+}
+
+// MARK: - Time tracking
+
+@Model
+final class TimeEntry {
+    /// Always a multiple of 15; see `TimeParser`, the only place entries are created.
+    var minutes: Int = 0
+    /// The workday this time counts towards, day-granular like `Todo.dueDate`.
+    /// Independent of `createdAt`, since time is often logged after the fact.
+    var day: Date = Date()
+    var createdAt: Date = Date()
+
+    var todo: Todo?
+
+    init(minutes: Int, day: Date, todo: Todo? = nil) {
+        self.minutes = minutes
+        self.day = Calendar.current.startOfDay(for: day)
+        self.createdAt = Date()
+        self.todo = todo
+    }
+}
+
+extension Todo {
+    func trackedMinutes(on day: Date) -> Int {
+        let start = Calendar.current.startOfDay(for: day)
+        return timeEntries
+            .filter { Calendar.current.isDate($0.day, inSameDayAs: start) }
+            .reduce(0) { $0 + $1.minutes }
+    }
+
+    var totalTrackedMinutes: Int {
+        timeEntries.reduce(0) { $0 + $1.minutes }
+    }
+}
+
+enum TimeFormatter {
+    /// Compact "2h 15m" used in the UI.
+    static func shortLabel(minutes: Int) -> String {
+        let h = minutes / 60
+        let m = minutes % 60
+        if h == 0 { return "\(m)m" }
+        if m == 0 { return "\(h)h" }
+        return "\(h)h \(m)m"
+    }
+
+    /// Decimal hours ("2h", "3,5h") used by the clipboard export, matching the
+    /// user's locale so the separator reads naturally in their timesheet.
+    /// Two fraction digits is exact on the 15-minute grid (0.25 / 0.5 / 0.75);
+    /// it only starts rounding if that snap ever goes away.
+    static func hoursLabel(minutes: Int) -> String {
+        let hours = Double(minutes) / 60
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        formatter.locale = .current
+        let number = formatter.string(from: NSNumber(value: hours)) ?? String(hours)
+        return "\(number)h"
     }
 }
 

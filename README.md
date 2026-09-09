@@ -15,7 +15,7 @@
 
 <br><br>
 
-[Overview](#overview) · [Why I built it](#why-i-built-it) · [Install](#install) · [Languages](#languages) · [How it works](#how-it-works) · [Your data](#your-data) · [License](#license)
+[Overview](#overview) · [Why I built it](#why-i-built-it) · [Install](#install) · [Languages](#languages) · [How it works](#how-it-works) · [Your data](#your-data) · [Contributors](#contributors) · [License](#license)
 
 </div>
 
@@ -25,6 +25,7 @@
 - **A Today pane with a day arc:** Fills as you finish things, so where you are is one glance.
 - **A menu bar popover:** Showing what's still open. Same process, easy overview anytime.
 - **Lists with colours, priorities, due dates and notes:** Add custom lists (e.g. per project), organize with colors, leave notes, priorities, due dates and more.
+- **Time you can paste into a timesheet:** Log work on a todo as `1.5h`, `30 min`, or `1:30`; it snaps to 15 minutes. Right-click a list to copy that day's lines as `- Todo (2h)`.
 - **Local and yours:** One SwiftData store on your disk, no account, no network, no telemetry.
 - **No third-party dependencies:** Plain SwiftUI and SwiftData on macOS.
 
@@ -75,8 +76,12 @@ requests welcome.
 due-date rule, for that day only. The whole thing is about fifteen lines in
 [`Models.swift`](Sources/DayPlan/Models.swift), under `isInDailyPlan(on:includeOverdue:)`.
 
+**Tracked time.** Each log is a `TimeEntry` on the todo, always a multiple of 15 minutes.
+[`TimeParser.swift`](Sources/DayPlan/TimeParser.swift) turns free-form input into that grid.
+Right-click a list to copy a day's work as clipboard-ready `- Todo (2h)` lines.
+
 **Backups you can read without the app.** Plain versioned JSON, and importing either merges or
-replaces ([`Backup.swift`](Sources/DayPlan/Backup.swift)).
+replaces ([`Backup.swift`](Sources/DayPlan/Backup.swift)). Time entries travel with the todos.
 
 **One set of animation curves.** Every timing in both UIs comes from
 [`Motion.swift`](Sources/DayPlan/Motion.swift), so a row in the menu bar moves like the same row
@@ -103,6 +108,11 @@ DAYPLAN_SEED_DEMO=1 \
 `DAYPLAN_STORE_DIR` picks a different store location. `DAYPLAN_SEED_DEMO=1` fills it with a sample
 day, but only when that store is completely empty, so it can never overwrite anything you care
 about.
+
+## Contributors
+
+- [benedom](https://github.com/benedom) — original author
+- [jay-k98](https://github.com/jay-k98)
 
 ## License
 
